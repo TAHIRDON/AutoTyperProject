@@ -1,0 +1,3 @@
+pdfplumber
+pyautogui
+PyPDF2
