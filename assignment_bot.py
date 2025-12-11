@@ -6,14 +6,34 @@ import time
 import threading
 import random
 import os
+import sys  # Needed for the resource_path fix
+import ctypes
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class UniversalAutoTyper:
     def __init__(self, root):
         self.root = root
-        self.root.title("Assignment Typer Pro")
+        self.root.title("GhostType")
         self.root.geometry("650x700")
         self.root.configure(bg="#f0f2f5")
-        
+
+        # --- FIX: Use resource_path to find the icon inside the EXE ---
+        try:
+            icon_file = resource_path("GhostType.ico")
+            self.root.iconbitmap(icon_file)
+        except Exception as e:
+            print(f"Icon error: {e}")
+        # -------------------------------------------------------------
+
         # State variables
         self.is_running = False
         self.is_paused = False
@@ -45,14 +65,13 @@ class UniversalAutoTyper:
         self.text_area = tk.Text(main_frame, height=10, font=("Consolas", 10), bd=2, relief=tk.FLAT)
         self.text_area.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # 3. Tuning (The "Human" settings)
+        # 3. Tuning
         tune_frame = tk.LabelFrame(main_frame, text="Human Behavior Tuning", bg="#f0f2f5", font=("Segoe UI", 11, "bold"))
         tune_frame.pack(fill=tk.X, pady=10)
 
-        # Speed Inputs
         tk.Label(tune_frame, text="WPM (Words Per Minute):").pack(side=tk.LEFT, padx=10)
         self.wpm_entry = tk.Entry(tune_frame, width=5)
-        self.wpm_entry.insert(0, "70") # 70 WPM is standard student speed
+        self.wpm_entry.insert(0, "70") 
         self.wpm_entry.pack(side=tk.LEFT)
 
         # 4. Controls
@@ -65,7 +84,7 @@ class UniversalAutoTyper:
         self.btn_stop = tk.Button(ctrl_frame, text="⏹ EMERGENCY STOP", command=self.stop_typing, bg="#c0392b", fg="white", font=("Segoe UI", 11, "bold"), width=20, relief=tk.FLAT, state=tk.DISABLED)
         self.btn_stop.pack(side=tk.RIGHT, padx=5)
 
-        # 5. Status Bar & Progress
+        # 5. Status Bar
         self.status_var = tk.StringVar(value="Ready. Load text to begin.")
         self.lbl_status = tk.Label(root, textvariable=self.status_var, bg="#34495e", fg="white", pady=8, font=("Consolas", 10))
         self.lbl_status.pack(side=tk.BOTTOM, fill=tk.X)
@@ -81,7 +100,7 @@ class UniversalAutoTyper:
                     for page in pdf.pages:
                         extracted = page.extract_text()
                         if extracted: text += extracted + "\n"
-            else: # Text file
+            else: 
                 with open(file_path, "r", encoding="utf-8") as f:
                     text = f.read()
 
@@ -95,8 +114,6 @@ class UniversalAutoTyper:
         self.is_running = True
         self.btn_start.config(state=tk.DISABLED, bg="#95a5a6")
         self.btn_stop.config(state=tk.NORMAL, bg="#c0392b")
-        
-        # Start the worker thread
         t = threading.Thread(target=self.human_typing_logic, daemon=True)
         t.start()
 
@@ -110,16 +127,13 @@ class UniversalAutoTyper:
             self.reset_ui()
             return
 
-        # Calculate base delay from WPM
         try:
             wpm = float(self.wpm_entry.get())
-            # Avg word is 5 chars. WPM to chars per second = (WPM * 5) / 60
             cps = (wpm * 5) / 60
             base_delay = 1 / cps
         except:
-            base_delay = 0.1 # Default fallback
+            base_delay = 0.1
 
-        # 5 Second Countdown
         for i in range(5, 0, -1):
             if not self.is_running: return
             self.status_var.set(f"⏳ Click target window! Starting in {i}...")
@@ -128,44 +142,26 @@ class UniversalAutoTyper:
         self.status_var.set("✍ Typing in progress... Do not touch mouse/keyboard.")
         
         try:
-            # === THE ALGORITHM ===
             for i, char in enumerate(content):
                 if not self.is_running: break
-
-                # 1. Typing Logic
                 pyautogui.keyDown(char)
-                # Hold key for 50ms - 90ms (Human finger press time)
                 time.sleep(random.uniform(0.05, 0.09))
                 pyautogui.keyUp(char)
-
-                # 2. Timing Logic (Gaussian Distribution)
-                # This creates a "Bell Curve" of speed. Most strokes are near base_delay,
-                # but some are faster/slower naturally.
                 actual_delay = random.gauss(base_delay, 0.03) 
-                if actual_delay < 0.02: actual_delay = 0.02 # Min limit
-                
+                if actual_delay < 0.02: actual_delay = 0.02
                 time.sleep(actual_delay)
-
-                # 3. Punctuation Pauses
-                # Humans naturally pause after sentences.
                 if char in ['.', '?', '!', '\n']:
                     time.sleep(random.uniform(0.3, 0.6))
                 elif char in [',', ';']:
                     time.sleep(random.uniform(0.15, 0.25))
-
-                # 4. Fatigue / Thinking Pauses
-                # Every ~150 chars, take a small "thinking" break (10% chance)
                 if i % 150 == 0 and random.random() < 0.1:
                     time.sleep(random.uniform(0.5, 1.2))
-
             if self.is_running:
                 self.status_var.set("✅ Typing Completed Successfully.")
                 messagebox.showinfo("Success", "Assignment Typing Complete!")
-
         except Exception as e:
             self.status_var.set(f"⚠️ Error: {e}")
             print(e)
-        
         self.reset_ui()
 
     def reset_ui(self):
@@ -174,6 +170,13 @@ class UniversalAutoTyper:
         self.btn_stop.config(state=tk.DISABLED, bg="#95a5a6")
 
 if __name__ == "__main__":
+    try:
+        # TASKBAR FIX: Ensure unique App ID
+        myappid = 'tahirdon.ghosttype.autowriter.1.0' 
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+
     root = tk.Tk()
     app = UniversalAutoTyper(root)
     root.mainloop()
